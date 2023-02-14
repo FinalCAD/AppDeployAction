@@ -1,0 +1,27 @@
+name: 'Deploy apps'
+description: 'Update charts for deploy'
+inputs:
+  registry:
+    description: 'Registry name for app'
+    required: true
+  sqitch:
+    description: 'Sqitch is enable on this app'
+    required: true
+    default: false
+  environment:
+    description: 'Finalcad envrionment: production, staging, sandbox'
+    require: true
+  region-friendly:
+    description: 'Finalcad region: frankfurt or tokyo'
+    require: true
+    default: 'frankfurt'
+  tag:
+    description: 'Tag to deployed'
+    require: false
+runs:
+  using: 'composite'
+  steps:
+    - name: Test
+      shell: bash
+      run: |
+        bash test.sh
