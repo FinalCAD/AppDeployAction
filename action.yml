@@ -1,27 +1,85 @@
 name: 'Deploy apps'
 description: 'Update charts for deploy'
 inputs:
+  app-name:
+    description: 'Applcation id'
+    required: false
+    default: ''
+  aws-role:
+    description: 'Aws role to apply changes'
+    required: true
+  aws-region:
+    description: 'Aws region'
+    default: 'eu-central-1'
+  debug:
+    description: 'Debug mode'
+    default: false
+  github-ssh:
+    description: 'github ssh key to pull terragrunt from github api'
+    required: true
   registry:
     description: 'Registry name for app'
     required: true
   sqitch:
     description: 'Sqitch is enable on this app'
-    required: true
     default: false
+  workdir:
+    description: 'Workdir'
+    default: 'eks-apps'
   environment:
     description: 'Finalcad envrionment: production, staging, sandbox'
-    require: true
-  region-friendly:
-    description: 'Finalcad region: frankfurt or tokyo'
-    require: true
-    default: 'frankfurt'
+    required: true
+  regions:
+    description: 'Regions: eu, ap'
+    default: 'eu,ap'
   tag:
     description: 'Tag to deployed'
-    require: false
+    default: ''
 runs:
   using: 'composite'
   steps:
-    - name: Test
+    - name: Configure AWS credentials
+      uses: aws-actions/configure-aws-credentials@v1
+      with:
+        aws-region: ${{ inputs.aws-region }}
+        role-to-assume: ${{ inputs.aws-role }}
+        role-session-name: OIDCSession
+    - name: Define eks-apps repository
+      id: repository
       shell: bash
       run: |
-        bash test.sh
+        set -e
+        if [ "${{ inputs.environment }}" == "sandbox" ]; then
+          echo "repository=FinalCAD/eks-apps-sandbox" >> $GITHUB_OUTPUT
+        else
+          echo "repository=FinalCAD/eks-apps" >> $GITHUB_OUTPUT
+        fi
+    - name: "Checkout ${{ steps.repository.outputs.repository }}"
+      uses: actions/checkout@v3
+      with:
+        ssh-key: ${{ inputs.github-ssh }}
+        repository: ${{ steps.repository.outputs.repository }}
+        path: ${{ inputs.workdir }}
+    - name: Get username & email of actor
+      id: actor
+      shell: bash
+      run: |
+        echo "actor-email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
+        echo "actor-name=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
+    - name: Update deployment manifest
+      shell: bash
+      working-directory: ${{ inputs.workdir }}
+      env:
+        REGIONS: ${{ inputs.regions }}
+        REGISTRY: ${{ inputs.registry }}
+        AWS_REGION: ${{ inputs.aws-region }}
+        ENVIRONMENT: ${{ inputs.environment }}
+        APPNAME: ${{ inputs.app-name }}
+        SQITCH: ${{ inputs.sqitch }}
+        DEBUG: ${{ inputs.debug }}
+        REF: ${{ inputs.tag }}
+        WORKDIR: ${{ inputs.workdir }}
+        ACTOR_EMAIL: ${{ steps.actor.outputs.actor-email }}
+        ACTOR_NAME: ${{ steps.actor.outputs.actor-name }}
+      run: |
+        bash ${GITHUB_ACTION_PATH}/update.sh
