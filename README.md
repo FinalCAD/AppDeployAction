@@ -23,7 +23,7 @@ Debug mode (will not update eks-apps repository), Default: false
 [**Required**] Registry name for app
 
 ### `sqitch`
-Enable sqitch on this deployment, Default: false
+Enable sqitch on this deployment, if you enable sqitch, app deployment is disbale, Default: false
 
 ### `workdir`
 Github action working directory, Default: eks-apps

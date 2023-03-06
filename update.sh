@@ -78,8 +78,8 @@ regions=${REGIONS//,/$'\n'}
 
 ref="${REF:-latest}"
 key="${key:-.image.sha}"
+sqitch="${SQITCH:-false}"
 sqitch_key="${sqitch_key:-.sqitch.sha}"
-
 
 if [ -z "${ACTOR_EMAIL}" ]; then
   ACTOR_EMAIL="${GITHUB_ACTOR}@finalcad.com"
@@ -96,43 +96,47 @@ if [ -z "${APPNAME}" ]; then
   APPNAME=$(echo "${REGISTRY}" | cut -d '/' -f2)
 fi
 
-# Get image digest from reference
-set +e
-check_ecr_compute_sha "${REGISTRY}" "${ref}"
-set -e
+if [ "${sqitch}" = "false" ]; then
+  # Get image digest from reference
+  set +e
+  check_ecr_compute_sha "${REGISTRY}" "${ref}"
+  set -e
 
-# For every defined regions, update values file with image sha
-for region in ${regions}; do
-  echo "############################################"
-  echo "# UPDATE APP ${region}, ${REGISTRY}"
-  echo "############################################"
-  file="${filename:-${APPNAME}.${ENVIRONMENT}.${region}.values.yaml}"
-  values_file="${ENVIRONMENT}/${region}/${file}"
-  echo "appname: ${APPNAME}"
-  echo "registry: ${REGISTRY}"
-  echo "region: ${region}"
-  echo "environment: ${ENVIRONMENT}"
-  echo "value_file: ${values_file}"
-  echo "tag: ${tag}"
-  echo "reference: ${ref}"
-  echo "sha computed: ${sha256}"
-  echo "############################################"
-  if [ ! "${debug}" = true ]; then
-    if [ ! -f "${values_file}" ]; then
-      echo "[ERROR] File ${values_file} not found, exiting..."
-      exit 1
-    fi
-    # Update value in yaml file
-    echo "Updating the new version of ${APPNAME} in ${values_file} on ${ENVIRONMENT} ${region}"
-    update_value "${sha256}" "${key}" "${APPNAME}" "${ENVIRONMENT}" "${region}" "${values_file}"
+  # For every defined regions, update values file with image sha
+  for region in ${regions}; do
     echo "############################################"
-  fi
-done
+    echo "# UPDATE APP ${region}, ${REGISTRY}"
+    echo "############################################"
+    file="${filename:-${APPNAME}.${ENVIRONMENT}.${region}.values.yaml}"
+    values_file="${ENVIRONMENT}/${region}/${file}"
+    echo "appname: ${APPNAME}"
+    echo "registry: ${REGISTRY}"
+    echo "region: ${region}"
+    echo "environment: ${ENVIRONMENT}"
+    echo "value_file: ${values_file}"
+    echo "tag: ${tag}"
+    echo "reference: ${ref}"
+    echo "sha computed: ${sha256}"
+    echo "############################################"
+    if [ ! "${debug}" = true ]; then
+      if [ ! -f "${values_file}" ]; then
+        echo "[ERROR] File ${values_file} not found, exiting..."
+        exit 1
+      fi
+      # Update value in yaml file
+      echo "Updating the new version of ${APPNAME} in ${values_file} on ${ENVIRONMENT} ${region}"
+      update_value "${sha256}" "${key}" "${APPNAME}" "${ENVIRONMENT}" "${region}" "${values_file}"
+      echo "############################################"
+    fi
+  done
+fi
 
-if [ "${SQITCH}" = "true" ]; then
+if [ "${sqitch}" = "true" ]; then
   regions_sqitch=${regions_sqitch:-$regions}
   # Get sqitch image digest from reference
+  set +e
   check_ecr_compute_sha "${REGISTRY}-sqitch"
+  set -e
   # For every defined regions, update values file with image sha
   for region in ${regions_sqitch}; do
     echo "############################################"
@@ -141,7 +145,7 @@ if [ "${SQITCH}" = "true" ]; then
     file="${filename:-${APPNAME}.${ENVIRONMENT}.${region}.values.yaml}"
     values_file="${ENVIRONMENT}/${region}/${file}"
     echo "appname: ${APPNAME}"
-    echo "registry: ${REGISTRY}"
+    echo "registry: ${REGISTRY}-sqitch"
     echo "region: ${region}"
     echo "environment: ${ENVIRONMENT}"
     echo "value_file: ${values_file}"
