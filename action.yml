@@ -2,7 +2,7 @@ name: 'Deploy apps'
 description: 'Update charts for deploy'
 inputs:
   app-name:
-    description: 'Applcation id'
+    description: 'Application id'
     required: false
     default: ''
   aws-role:
@@ -15,13 +15,13 @@ inputs:
     description: 'Debug mode'
     default: false
   github-ssh:
-    description: 'github ssh key to pull terragrunt from github api'
+    description: 'Github ssh key to pull terragrunt from github api'
     required: true
   registry:
     description: 'Registry name for app'
     required: true
   sqitch:
-    description: 'Sqitch is enable on this app'
+    description: 'Only trigger sqitch deploy'
     default: false
   workdir:
     description: 'Workdir'
@@ -33,7 +33,7 @@ inputs:
     description: 'Regions: eu, ap'
     default: 'eu,ap'
   tag:
-    description: 'Tag to deployed'
+    description: 'Tag to deploy'
     default: ''
 runs:
   using: 'composite'
