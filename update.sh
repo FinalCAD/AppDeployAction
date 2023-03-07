@@ -132,10 +132,18 @@ if [ "${sqitch}" = "false" ]; then
 fi
 
 if [ "${sqitch}" = "true" ]; then
+
+  if [[ ${REGISTRY} == *sqitch ]]
+  then
+    sqitch_registry="${REGISTRY}"
+  else
+    sqitch_registry="${REGISTRY}-sqitch"
+  fi
+
   regions_sqitch=${regions_sqitch:-$regions}
   # Get sqitch image digest from reference
   set +e
-  check_ecr_compute_sha "${REGISTRY}-sqitch"
+  check_ecr_compute_sha "${sqitch_registry}"
   set -e
   # For every defined regions, update values file with image sha
   for region in ${regions_sqitch}; do
@@ -145,7 +153,7 @@ if [ "${sqitch}" = "true" ]; then
     file="${filename:-${APPNAME}.${ENVIRONMENT}.${region}.values.yaml}"
     values_file="${ENVIRONMENT}/${region}/${file}"
     echo "appname: ${APPNAME}"
-    echo "registry: ${REGISTRY}-sqitch"
+    echo "registry: ${sqitch_registry}"
     echo "region: ${region}"
     echo "environment: ${ENVIRONMENT}"
     echo "value_file: ${values_file}"
