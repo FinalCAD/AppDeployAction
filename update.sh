@@ -143,7 +143,7 @@ if [ "${sqitch}" = "true" ]; then
   regions_sqitch=${regions_sqitch:-$regions}
   # Get sqitch image digest from reference
   set +e
-  check_ecr_compute_sha "${sqitch_registry}"
+  check_ecr_compute_sha "${sqitch_registry}" "${ref}"
   set -e
   # For every defined regions, update values file with image sha
   for region in ${regions_sqitch}; do
@@ -167,8 +167,8 @@ if [ "${sqitch}" = "true" ]; then
         exit 1
       fi
       # Update value in yaml file
-      echo "Updating the new version of ${APPNAME}-sqitch in ${values_file} on ${ENVIRONMENT} ${region}"
-      update_value "${sha256}" "${sqitch_key}" "${APPNAME}-sqitch" "${ENVIRONMENT}" "${region}" "${values_file}"
+      echo "Updating the new version of ${APPNAME} in ${values_file} on ${ENVIRONMENT} ${region}"
+      update_value "${sha256}" "${sqitch_key}" "${APPNAME}" "${ENVIRONMENT}" "${region}" "${values_file}"
       echo "############################################"
     fi
   done
