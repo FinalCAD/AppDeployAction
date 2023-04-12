@@ -14,9 +14,10 @@ fi
 function check_ecr_compute_sha() {
   local _registry=$1
   local _reference=$2
+  local _computed_sha256=""
   local _repo_cmd="aws ${aws_cli_options} --region ${aws_region} ecr describe-repositories --repository-names ${_registry}"
   echo "AWS cmd: ${_repo_cmd}"
-  $($repo_cmd)
+  eval "${_repo_cmd}"
   status=$?
   if [ "${status}" -ne 0 ]; then
     echo "Registry ${_registry} not found on ${aws_region}"
@@ -24,7 +25,7 @@ function check_ecr_compute_sha() {
   fi
   local _cmd="aws ${aws_cli_options} --region ${aws_region} ecr describe-images --repository-name ${_registry} | jq -r '.imageDetails[] | select(.imageTags | index(\"${_reference}\")) | .imageDigest'"
   echo "AWS cmd: ${_cmd}"
-  local _computed_sha256=$(eval "${_cmd}")
+  _computed_sha256=$(eval "${_cmd}")
   if [ -z "${_computed_sha256}" ]; then
     echo "[ERROR] Unable to find a image with reference \"${_reference}\", exiting..."
     exit 1
@@ -62,7 +63,8 @@ function update_value() {
   local _env=$4
   local _region=$5
   local _values_file=$6
-  local _existing_value=$(yq e "${_key}" "${_values_file}")
+  local _existing_value=""
+  _existing_value=$(yq e "${_key}" "${_values_file}")
   echo "Existing value for ${_app_name} : ${_existing_value}"
   if [ "${_existing_value}" = "${_sha256}" ]; then
     echo "[WARNING] The image's SHA is already ${_sha256}, nothing to do..."
@@ -107,14 +109,17 @@ if [ "${sqitch}" = "false" ]; then
     echo "############################################"
     echo "# UPDATE APP ${region}, ${REGISTRY}"
     echo "############################################"
-    file="${filename:-${APPNAME}.${ENVIRONMENT}.${region}.values.yaml}"
+    if [ -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
+      file="${APPNAME}.yaml"
+    else
+      file="${APPNAME}.${ENVIRONMENT}.${region}.values.yaml"
+    fi
     values_file="${ENVIRONMENT}/${region}/${file}"
     echo "appname: ${APPNAME}"
     echo "registry: ${REGISTRY}"
     echo "region: ${region}"
     echo "environment: ${ENVIRONMENT}"
     echo "value_file: ${values_file}"
-    echo "tag: ${tag}"
     echo "reference: ${ref}"
     echo "sha computed: ${sha256}"
     echo "############################################"
@@ -150,14 +155,17 @@ if [ "${sqitch}" = "true" ]; then
     echo "############################################"
     echo "# UPDATE SQITCH ${region}, ${REGISTRY}"
     echo "############################################"
-    file="${filename:-${APPNAME}.${ENVIRONMENT}.${region}.values.yaml}"
+    if [ -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
+      file="${APPNAME}.yaml"
+    else
+      file="${APPNAME}.${ENVIRONMENT}.${region}.values.yaml"
+    fi
     values_file="${ENVIRONMENT}/${region}/${file}"
     echo "appname: ${APPNAME}"
     echo "registry: ${sqitch_registry}"
     echo "region: ${region}"
     echo "environment: ${ENVIRONMENT}"
     echo "value_file: ${values_file}"
-    echo "tag: ${tag}"
     echo "reference: ${ref}"
     echo "sha computed: ${sha256}"
     echo "############################################"
