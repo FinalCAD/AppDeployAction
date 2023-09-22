@@ -11,6 +11,26 @@ if [ "${debug}" = true ]; then
   set +x
 fi
 
+function create_file() {
+  local _env=$1
+  local _region=$2
+  local _app_name=$3
+  local _registry=$4
+  local _key=$5
+  local _values_file="${_env}/${_region}/${_app_name}.yaml"
+  cat << EOF > "${_values_file}"
+---
+app:
+  name: $_app_name
+  finalcadContext: finalcad-one
+EOF
+  yq e -i ".image.repository=\"${_registry}\"" "${_values_file}"
+  yq e -i "${_key}=\"sha256:init\""  "${_values_file}"
+  cat "${_env}/${_region}/${_app_name}.yaml"
+  echo "[INFO] File ${_env}/${_region}/${_app_name}.yaml created"
+  git add "${_env}/${_region}/${_app_name}.yaml"
+}
+
 function check_ecr_compute_sha() {
   local _registry=$1
   local _reference=$2
@@ -75,6 +95,32 @@ function update_value() {
   fi
 }
 
+function update_value_sqitch() {
+  local _sha256=$1
+  local _key=$2
+  local _app_name=$3
+  local _env=$4
+  local _region=$5
+  local _values_file=$6
+  local _sqitch_registry=$7
+  local _existing_value=""
+
+  if ! jq ".sqitch" "$_values_file" &>/dev/null; then
+    # The "sqitch" section is missing, so we add it using jq and update the file in place
+    yq e -i ".sqitch.repository = \"${_sqitch_registry}\"" "${_values_file}"
+    yq e -i "${_key}=\"sha256:init\""  "${_values_file}"
+  fi
+  _existing_value=$(yq e "${_key}" "${_values_file}")
+  echo "Existing value for ${_app_name} : ${_existing_value}"
+  if [ "${_existing_value}" = "${_sha256}" ]; then
+    echo "[WARNING] The image's SHA is already ${_sha256}, nothing to do..."
+  else
+    yq e -i "${_key}=\"${_sha256}\"" "${_values_file}"
+    echo "File ${_values_file} updated with ${_key} => ${_sha256}"
+    git commit -am "${_app_name} ${_env}.${_region}: update sha256 to ${_sha256}"
+  fi
+}
+
 # change comma to white space
 regions=${REGIONS//,/$'\n'}
 
@@ -109,12 +155,10 @@ if [ "${sqitch}" = "false" ]; then
     echo "############################################"
     echo "# UPDATE APP ${region}, ${REGISTRY}"
     echo "############################################"
-    if [ -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
-      file="${APPNAME}.yaml"
-    else
-      file="${APPNAME}.${ENVIRONMENT}.${region}.values.yaml"
+    if [ ! -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
+      create_file "${ENVIRONMENT}" "${region}" "${APPNAME}" "${REGISTRY}" "${key}"
     fi
-    values_file="${ENVIRONMENT}/${region}/${file}"
+    values_file="${ENVIRONMENT}/${region}/${APPNAME}.yaml"
     echo "appname: ${APPNAME}"
     echo "registry: ${REGISTRY}"
     echo "region: ${region}"
@@ -155,12 +199,10 @@ if [ "${sqitch}" = "true" ]; then
     echo "############################################"
     echo "# UPDATE SQITCH ${region}, ${REGISTRY}"
     echo "############################################"
-    if [ -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
-      file="${APPNAME}.yaml"
-    else
-      file="${APPNAME}.${ENVIRONMENT}.${region}.values.yaml"
+    if [ ! -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
+      create_file "${ENVIRONMENT}" "${region}" "${APPNAME}"
     fi
-    values_file="${ENVIRONMENT}/${region}/${file}"
+    values_file="${ENVIRONMENT}/${region}/${APPNAME}.yaml"
     echo "appname: ${APPNAME}"
     echo "registry: ${sqitch_registry}"
     echo "region: ${region}"
@@ -176,7 +218,7 @@ if [ "${sqitch}" = "true" ]; then
       fi
       # Update value in yaml file
       echo "Updating the new version of ${APPNAME} in ${values_file} on ${ENVIRONMENT} ${region}"
-      update_value "${sha256}" "${sqitch_key}" "${APPNAME}" "${ENVIRONMENT}" "${region}" "${values_file}"
+      update_value_sqitch "${sha256}" "${sqitch_key}" "${APPNAME}" "${ENVIRONMENT}" "${region}" "${values_file}" "${sqitch_registry}"
       echo "############################################"
     fi
   done
