@@ -17,15 +17,18 @@ inputs:
   github-ssh:
     description: 'Github ssh key to pull terragrunt from github api'
     required: true
+  helm-repo:
+    description: 'helm repository'
+    default: 'FinalCAD/eks-apps'
+  helm-ref:
+    descrition: 'Ref to use for pulling helm repo'
+    default: 'master'
   registry:
     description: 'Registry name for app'
     required: true
   sqitch:
     description: 'Only trigger sqitch deploy'
     default: false
-  workdir:
-    description: 'Workdir'
-    default: 'eks-apps'
   environment:
     description: 'Finalcad envrionment: production, staging, sandbox'
     required: true
@@ -35,9 +38,18 @@ inputs:
   tag:
     description: 'Tag to deploy'
     default: ''
+  override-file:
+    description: 'File with path for override files configuration'
+    default: '.finalcad/overrides.yaml'
+  kubernetes-version:
+    description: 'Kubernetes version to test against'
+    default: '1.27.0'
 runs:
   using: 'composite'
   steps:
+    - uses: actions/checkout@v3
+      with:
+        path: 'app'
     - name: Configure AWS credentials
       uses: aws-actions/configure-aws-credentials@v1
       with:
@@ -59,7 +71,38 @@ runs:
       with:
         ssh-key: ${{ inputs.github-ssh }}
         repository: ${{ steps.repository.outputs.repository }}
-        path: ${{ inputs.workdir }}
+        ref: ${{ inputs.helm-ref }}
+        path: 'helm'
+    # Setup ssh key
+    - name: Add ssh key
+      shell: bash
+      run: |
+        mkdir -p ~/.ssh
+        echo "${{ inputs.github-ssh }}" > ~/.ssh/id_rsa
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        chmod 600 ~/.ssh/id_rsa ~/.ssh/known_hosts
+        eval $(ssh-agent)
+        ssh-add ~/.ssh/id_rsa
+    # Setup go
+    - name: Setup go
+      uses: actions/setup-go@v4
+      with:
+        token: ${{ inputs.github-token }}
+        go-version: 1.18
+    # Setup helm
+    - uses: azure/setup-helm@v3
+      with:
+        token: ${{ inputs.github-token }}
+    # Setup kubeconform & yq
+    - name: Setup kubeconform & yq & cue
+      shell: bash
+      run: |
+        go install github.com/yannh/kubeconform/cmd/kubeconform@v0.6.1
+        go install cuelang.org/go/cmd/cue@v0.4.3
+        mkdir -p ${RUNNER_TEMP}/yq
+        wget https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O "${RUNNER_TEMP}/yq/yq"
+        chmod +x "${RUNNER_TEMP}/yq/yq"
+        echo "${RUNNER_TEMP}/yq" >> $GITHUB_PATH
     - name: Get username & email of actor
       id: actor
       shell: bash
@@ -68,7 +111,7 @@ runs:
         echo "actor-name=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
     - name: Update deployment manifest
       shell: bash
-      working-directory: ${{ inputs.workdir }}
+      working-directory: ./helm
       env:
         REGIONS: ${{ inputs.regions }}
         REGISTRY: ${{ inputs.registry }}
@@ -78,8 +121,10 @@ runs:
         SQITCH: ${{ inputs.sqitch }}
         DEBUG: ${{ inputs.debug }}
         REF: ${{ inputs.tag }}
-        WORKDIR: ${{ inputs.workdir }}
         ACTOR_EMAIL: ${{ steps.actor.outputs.actor-email }}
         ACTOR_NAME: ${{ steps.actor.outputs.actor-name }}
+        OVERRIDE_PATH: ../app/${{ inputs.override-file }}
+        KUBEVERSIONS: ${{ inputs.kubernetes-version }}
+        DEFAULT_FILE: ${{ github.action_path }}/default.yaml
       run: |
         bash ${GITHUB_ACTION_PATH}/update.sh

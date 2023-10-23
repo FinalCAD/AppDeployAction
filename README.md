@@ -1,7 +1,7 @@
-
 # AppDeployAction
 
 Github Action to update corresponding eks-apps(-sandbox) git repository to trigger application deployment.
+After version 3.0, this action handle deployment and override files.
 
 ## Inputs
 ### `app-name`
@@ -16,17 +16,29 @@ AWS region for ECR checks, Default: eu-central-1
 ### `debug`
 Debug mode (will not update eks-apps repository), Default: false
 
+### `helm-repo`
+Repository for eks-apps, Default: `FinalCAD/eks-apps(-sandbox)`
+
+### `helm-ref`
+Reference to use for `helm-repo`, Default: master
+
+### `github-token`
+Github token to avoid limit rate when pulling package
+
 ### `github-ssh`
 [**Required**] Github ssh key to pull & change eks-apps repository
+
+### `override-file`
+Path for override file, Default: `.finalcad/overrides.yaml`
+
+### `kubernetes-version`
+List of kubernetes version to test tthe chart against, default: `1.27.0`
 
 ### `registry`
 [**Required**] Registry name for app
 
 ### `sqitch`
-Enable sqitch on this deployment, if you enable sqitch, app deployment is disbale, Default: false
-
-### `workdir`
-Github action working directory, Default: eks-apps
+Update only sqitch reference, default app deployment and override is ignored, Default: false, activate this after buidling sqitch image
 
 ### `environment`
 [**Required**] Finalcad envrionment: production, staging, sandbox
@@ -35,15 +47,15 @@ Github action working directory, Default: eks-apps
 Regions to deploy changes, Default: eu, ap
 
 ### `tag`
-Iamge reference to deploy and update eks-apps, can be tag or sha, Default: latest image in registry
+Iamge reference to deploy and update eks-apps, can be tag or sha, Default: latest image in registry if empty
 
 ## Usage
 
 ```yaml
-- uses: FinalCAD/AppDeployAction@v0.0.1
+- uses: FinalCAD/AppDeployAction@v3.0
   name: Deploy
   with:
-    app-name: api1-service-api
+    registry: dotnet-backends/api1-service-api
     aws-role: ${{ secrets.DEPLOY_ROLE }}
     environment: sandbox
     github-ssh: ${{ secrets.GH_DEPLOY_SSH }}
