@@ -17,6 +17,9 @@ inputs:
   github-ssh:
     description: 'Github ssh key to pull terragrunt from github api'
     required: true
+  github-token:
+    description: 'Github token to pull package to avoid limit rate'
+    default: ''
   helm-repo:
     description: 'helm repository'
     default: 'FinalCAD/eks-apps'
