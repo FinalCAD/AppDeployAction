@@ -264,6 +264,13 @@ else
   override_continue "${ENVIRONMENT}" "${REGIONS}" "${APPNAME}" "${OVERRIDE_PATH}" "${default}"
 fi
 
+# Create missing main file
+for region in ${regions}; do
+  if [ ! -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
+    create_file_deploy "${ENVIRONMENT}" "${region}" "${APPNAME}" "${REGISTRY}" "${key}"
+  fi
+done
+
 if [ "${continue}" -eq 0 ]; then
   echo "[INFO] Nothing to change"
 else
@@ -300,9 +307,6 @@ for region in ${regions}; do
     echo "# UPDATE APP ${region}, ${REGISTRY}"
   fi
   echo "############################################"
-  if [ ! -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
-    create_file_deploy "${ENVIRONMENT}" "${region}" "${APPNAME}" "${REGISTRY}" "${key}"
-  fi
   values_file="${ENVIRONMENT}/${region}/${APPNAME}.yaml"
   echo "appname: ${APPNAME}"
   echo "registry: ${REGISTRY}"
