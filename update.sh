@@ -8,6 +8,7 @@ aws_cli_options="${aws_cli_options:-}"
 aws_region="${AWS_REGION:-eu-central-1}"
 
 function override_continue() {
+  set +e
   local _envrionmment=$1
   local _regions=$2
   local _application=$3
@@ -17,6 +18,7 @@ function override_continue() {
   continue=0
   for r in ${_array_regions}; do
     if [ -f "./${_envrionmment}/${r}/${_application}.override.yaml" ]; then
+      echo "[INFO] Existing override file needs to be checked"
       override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}")
       diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_envrionmment}/${r}/${_application}.override.yaml") > /dev/null
       exit_code="$?"
@@ -31,6 +33,7 @@ function override_continue() {
       break
     fi
   done
+  set -e
 }
 
 function test_cue() {
