@@ -79,6 +79,7 @@ function test_chart() {
 }
 
 function create_file_deploy() {
+  echo "[INFO] Create deploy file"
   local _env=$1
   local _region=$2
   local _app_name=$3
@@ -244,6 +245,7 @@ if [ "${debug}" = true ]; then
   echo "[INFO] Values environment: \"${ENVIRONMENT}\", region: \"${REGIONS}\", app: \"${APPNAME}\", path \"${OVERRIDE_PATH}\""
   set +x
 else
+  echo "[INFO] Setup git"
   setup_git
 fi
 
@@ -261,7 +263,9 @@ if [ "${sqitch}" = "true" ]; then
   # no override if we only update sqitch
   continue=0
 else
+  echo "[INFO] Test if override should be updated"
   override_continue "${ENVIRONMENT}" "${REGIONS}" "${APPNAME}" "${OVERRIDE_PATH}" "${default}"
+  echo "[INFO] continue: ${continue}"
 fi
 
 # Create missing main file
