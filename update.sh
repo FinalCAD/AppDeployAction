@@ -14,23 +14,29 @@ function override_continue() {
   local _application=$3
   local _override_path=$4
   local _default=$5
+  local _registry=$6
+  local _key=$7
   local _array_regions=${_regions//,/$'\n'}
   continue=0
   for r in ${_array_regions}; do
     if [ -f "./${_envrionmment}/${r}/${_application}.override.yaml" ]; then
-      echo "[INFO] Existing override file needs to be checked"
-      override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}")
-      diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_envrionmment}/${r}/${_application}.override.yaml") > /dev/null
-      exit_code="$?"
-      if [ ! "${exit_code}" -eq 0 ]; then
-        echo "[INFO] Drift detected"
-        continue=1
-        break
+      echo "[INFO] Existing override file in eks-apps needs to be checked"
+      if [ -f "${override_value}" ]; then
+        echo "[INFO] Existing override file in apps repository needs to be checked"
+        override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}")
+        diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_envrionmment}/${r}/${_application}.override.yaml") > /dev/null
+        exit_code="$?"
+        if [ ! "${exit_code}" -eq 0 ]; then
+          echo "[INFO] Drift detected"
+          continue=1
+        fi
+      else
+        echo "[INFO] No existing override file in apps repository"
       fi
     else
       echo "[INFO] Missing override file in region ${r}"
+      create_file_deploy "${_envrionmment}" "${r}" "${_application}" "${_registry}" "${_key}"
       continue=1
-      break
     fi
   done
   set -e
@@ -267,16 +273,9 @@ if [ "${sqitch}" = "true" ]; then
   continue=0
 else
   echo "[INFO] Test if override should be updated"
-  override_continue "${ENVIRONMENT}" "${REGIONS}" "${APPNAME}" "${OVERRIDE_PATH}" "${default}"
+  override_continue "${ENVIRONMENT}" "${REGIONS}" "${APPNAME}" "${OVERRIDE_PATH}" "${default}" "${REGISTRY}" "${key}"
   echo "[INFO] continue: ${continue}"
 fi
-
-# Create missing main file
-for region in ${regions}; do
-  if [ ! -f "${ENVIRONMENT}/${region}/${APPNAME}.yaml" ]; then
-    create_file_deploy "${ENVIRONMENT}" "${region}" "${APPNAME}" "${REGISTRY}" "${key}"
-  fi
-done
 
 if [ "${continue}" -eq 0 ]; then
   echo "[INFO] Nothing to change"
