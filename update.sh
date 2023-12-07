@@ -22,8 +22,8 @@ function override_continue() {
     echo "[INFO] Check region : ${r}"
     if [ -f "./${_envrionmment}/${r}/${_application}.override.yaml" ]; then
       echo "[INFO] Existing override file in eks-apps needs to be checked (./${_envrionmment}/${r}/${_application}.override.yaml)"
-      if [ -f "${override_value}" ]; then
-        echo "[INFO] Existing override file in apps repository needs to be checked (${override_value})"
+      if [ -f "${_override_path}" ]; then
+        echo "[INFO] Existing override file in apps repository needs to be checked (${_override_path})"
         override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}")
         diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_envrionmment}/${r}/${_application}.override.yaml") > /dev/null
         exit_code="$?"
@@ -32,7 +32,7 @@ function override_continue() {
           continue=1
         fi
       else
-        echo "[INFO] No existing override file in apps repository (${override_value})"
+        echo "[INFO] No existing override file in apps repository (${_override_path})"
       fi
     else
       echo "[INFO] Missing override file in region ${r}"
