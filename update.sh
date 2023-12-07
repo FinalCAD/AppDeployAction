@@ -19,6 +19,7 @@ function override_continue() {
   local _array_regions=${_regions//,/$'\n'}
   continue=0
   for r in ${_array_regions}; do
+    echo "[INFO] Check region : ${r}"
     if [ -f "./${_envrionmment}/${r}/${_application}.override.yaml" ]; then
       echo "[INFO] Existing override file in eks-apps needs to be checked (./${_envrionmment}/${r}/${_application}.override.yaml)"
       if [ -f "${override_value}" ]; then
