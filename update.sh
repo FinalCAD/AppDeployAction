@@ -210,7 +210,8 @@ function update_value_sqitch() {
   local _sqitch_registry=$7
   local _existing_value=""
 
-  if ! jq ".sqitch" "$_values_file" &>/dev/null; then
+  res=$(yq '.sqitch | has("repository")' "$_values_file")
+  if [ "$res" == "false" ]; then
     # The "sqitch" section is missing, so we add it using jq and update the file in place
     yq e -i ".sqitch.repository = \"${_sqitch_registry}\"" "${_values_file}"
     yq e -i "${_key}=\"sha256:init\"" "${_values_file}"
