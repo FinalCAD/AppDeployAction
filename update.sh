@@ -236,6 +236,10 @@ if [ "${debug}" = true ]; then
   set +x
 fi
 
+if [ -z "${REGIONS}"]; then
+  REGIONS="eu,ap"
+fi
+
 # change comma to white space
 regions=${REGIONS//,/$'\n'}
 
