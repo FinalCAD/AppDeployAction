@@ -1,31 +1,42 @@
 #! /bin/bash
 
 set -e
+set -o pipefail
+
 # Used for local tests (profile)
 debug=${DEBUG:-false}
+dry_run=${DRY_RUN:-false}
 default=${DEFAULT_FILE:-default.yaml}
 aws_cli_options="${aws_cli_options:-}"
 aws_region="${AWS_REGION:-eu-central-1}"
 
+echo "[INFO] Enable dry-run: ${dry_run}"
+if [[ "${dry_run}" == 'false' ]]; then
+  git_command=( git )
+else
+  git_command=( echo git )
+fi
+
 function override_continue() {
-  set +e
-  local _envrionmment=$1
-  local _regions=$2
-  local _application=$3
-  local _override_path=$4
-  local _default=$5
-  local _registry=$6
-  local _key=$7
+  local _environment="$1"; shift
+  local _regions="$1"; shift
+  local _application="$1"; shift
+  local _override_path="$1"; shift
+  local _default="$1"; shift
+  local _registry="$1"; shift
+  local _key="$1"; shift
   local _array_regions=${_regions//,/$'\n'}
   continue=0
   for r in ${_array_regions}; do
+    local _region_dir="./${_environment}/${r}"
+    [[ -d "${_region_dir}" ]] || continue
     echo "[INFO] Check region : ${r}"
-    if [ -f "./${_envrionmment}/${r}/${_application}.override.yaml" ]; then
-      echo "[INFO] Existing override file in eks-apps needs to be checked (./${_envrionmment}/${r}/${_application}.override.yaml)"
+    if [ -f "./${_environment}/${r}/${_application}.override.yaml" ]; then
+      echo "[INFO] Existing override file in eks-apps needs to be checked (./${_environment}/${r}/${_application}.override.yaml)"
       if [ -f "${_override_path}" ]; then
         echo "[INFO] Existing override file in apps repository needs to be checked (${_override_path})"
         override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}")
-        diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_envrionmment}/${r}/${_application}.override.yaml") > /dev/null
+        diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_environment}/${r}/${_application}.override.yaml") > /dev/null
         exit_code="$?"
         if [ ! "${exit_code}" -eq 0 ]; then
           echo "[INFO] Drift detected"
@@ -36,17 +47,16 @@ function override_continue() {
       fi
     else
       echo "[INFO] Missing override file in region ${r}"
-      create_file_deploy "${_envrionmment}" "${r}" "${_application}" "${_registry}" "${_key}"
+      create_file_deploy "${_environment}" "${r}" "${_application}" "${_registry}" "${_key}"
       continue=1
     fi
   done
-  set -e
 }
 
 function test_cue() {
-  local _envrionmment=$1
+  local _environment=$1
   local _override_path=$2
-  local _value_file=./${_envrionmment}/override.cue
+  local _value_file=./${_environment}/override.cue
   if ! cue vet "${_value_file}" "${_override_path}" --strict --simplify; then
     echo "[ERROR] Override file does not validate cue file"
     exit 1
@@ -54,81 +64,72 @@ function test_cue() {
 }
 
 function test_chart() {
-  local _envrionmment=$1
-  local _regions=$2
-  local _application=$3
-  local _override_path=$4
-  local _kubeversions=$5
-  local _repopath=./${_envrionmment}/chart
-  local _array_regions=${_regions//,/$'\n'}
-  local _array_kubeversions=${_kubeversions//,/$'\n'}
-  for region in ${_array_regions}; do
-    for kubeversion in ${_array_kubeversions}; do
-      echo "[INFO] Kubeconform & helm for ${region} on ${kubeversion}"
-      helm_args="-f ${_repopath}/values.yaml -f ${_repopath}/../${region}/values.yaml"
-      if [  -f "${_repopath}/../${region}/${_application}.${_envrionmment}.${region}.values.yaml" ]; then
-        helm_args+=" -f ${_repopath}/../${region}/${_application}.${_envrionmment}.${region}.values.yaml"
-      fi
-      if [  -f "${_repopath}/../${region}/${_application}.yaml" ]; then
-        helm_args+=" -f ${_repopath}/../${region}/${_application}.yaml"
-      fi
-      result=$(helm template ${_repopath} ${helm_args} -f ${_override_path})
-      if [ "$?" -ne 0 ]; then
-        echo "[ERROR] Helm chart is not valid after override"
+  local _environment="$1"; shift
+  local _regions="$1"; shift
+  local _application="$1"; shift
+  local _override_path="$1"; shift
+
+  local _region=''
+  for _region in ${_regions//,/$'\n'}; do
+    echo "[INFO] Kubeconform & helm for ${_region}"
+
+    ./scripts/check_templates.sh \
+      --environment "${_environment}" \
+      --region "${_region}" \
+      --file-name "${_application}.yaml" \
+      --override-file "${_override_path}" || {
+        echo "[ERROR] Check template has failed after override"
         exit 1
-      fi
-      echo "${result}" | kubeconform -schema-location default \
-        -schema-location 'https://raw.githubusercontent.com/datreeio/CRDs-catalog/main/{{.Group}}/{{.ResourceKind}}_{{.ResourceAPIVersion}}.json' \
-        -kubernetes-version "${kubeversion}" -strict
-      if [ "$?" -ne 0 ]; then
-        echo "[ERROR] kubeconform failed after override"
-        exit 1
-      fi
-    done
+    }
   done
 }
 
 function create_file_deploy() {
   echo "[INFO] Create deploy file"
-  local _env=$1
-  local _region=$2
-  local _app_name=$3
-  local _registry=$4
-  local _key=$5
-  local _values_file="${_env}/${_region}/${_app_name}.yaml"
-  cat << EOF > "${_values_file}"
+  local _env="$1"; shift
+  local _region="$1"; shift
+  local _app_name="$1"; shift
+  local _registry="$1"; shift
+  local _key="$1"; shift
+  local _values_dir="${_env}/${_region}"
+
+  [[ -d "${_values_dir}" ]] || return 0
+  local _values_file="${_values_dir}/${_app_name}.yaml"
+  cat << EOF > "${_values_file}" &&
 ---
 app:
   name: $_app_name
   finalcadContext: finalcad-one
 EOF
-  yq e -i ".image.repository=\"${_registry}\"" "${_values_file}"
-  yq e -i "${_key}=\"sha256:init\""  "${_values_file}"
-  cat "${_env}/${_region}/${_app_name}.yaml"
-  echo "[INFO] File ${_env}/${_region}/${_app_name}.yaml created"
-  git add "${_env}/${_region}/${_app_name}.yaml"
+  yq e -i ".image.repository=\"${_registry}\"" "${_values_file}" &&
+  yq e -i "${_key}=\"sha256:init\"" "${_values_file}" &&
+  cat "${_values_file}" &&
+  echo "[INFO] File ${_values_file} created" &&
+  "${git_command[@]}" add "${_values_file}" &&
+  true
 }
 
 function check_ecr_compute_sha() {
-  local _registry=$1
-  local _reference=$2
-  local _computed_sha256=""
-  local _repo_cmd="aws ${aws_cli_options} --region ${aws_region} ecr describe-repositories --repository-names ${_registry}"
-  echo "AWS cmd: ${_repo_cmd}"
-  eval "${_repo_cmd}"
-  status=$?
-  if [ "${status}" -ne 0 ]; then
-    echo "Registry ${_registry} not found on ${aws_region}"
-    exit 1
-  fi
-  local _cmd="aws ${aws_cli_options} --region ${aws_region} ecr describe-images --repository-name ${_registry} | jq -r '.imageDetails[] | select(.imageTags | index(\"${_reference}\")) | .imageDigest'"
-  echo "AWS cmd: ${_cmd}"
-  _computed_sha256=$(eval "${_cmd}")
-  if [ -z "${_computed_sha256}" ]; then
+  local _registry="$1"; shift
+  local _reference="$1"; shift
+
+  local _repo_cmd=( aws ${aws_cli_options} --region "${aws_region}" ecr describe-repositories --repository-names "${_registry}" )
+  echo "AWS cmd: ${_repo_cmd[@]}"
+  "${_repo_cmd[@]}" || status=$?
+  [[ "${status}" == 0 ]] || {
+    echo "[ERROR] Registry ${_registry} not found on ${aws_region}"
+    return "${status}"
+  } >&2
+
+  local _computed_sha256=''
+  local _cmd=( aws ${aws_cli_options} --output json --region "${aws_region}" ecr describe-images --repository-name "${_registry}" )
+  echo "AWS cmd: ${_cmd[@]}"
+  _computed_sha256="$("${_cmd[@]}" | jq -r --arg imageTagIndex "${_reference}" '.imageDetails[] | select(.imageTags | index($imageTagIndex)) | .imageDigest')" || status=$?
+  [[ "${status}" == 0 && ! -z "${_computed_sha256}" ]] || {
     echo "[ERROR] Unable to find a image with reference \"${_reference}\", exiting..."
-    exit 1
-  fi
-  sha256=${_computed_sha256}
+    return 1
+  } >&2
+  sha256="${_computed_sha256}"
 }
 
 function setup_git() {
@@ -139,45 +140,44 @@ function setup_git() {
     ACTOR_NAME="${GITHUB_ACTOR}"
   fi
 
-  git config --global user.email "${ACTOR_EMAIL}"
-  git config --global user.name "${ACTOR_NAME}"
+  "${git_command[@]}" config --global user.email "${ACTOR_EMAIL}"
+  "${git_command[@]}" config --global user.name "${ACTOR_NAME}"
 }
 
 function git_push() {
-  set +eo pipefail # allow error
-  # Error after 50 seconds / 5 attempts
-  i=1
-  while [ $i -lt 6 ]; do
-    git pull --rebase && git push
-    status=$?
-    if [ ! "${status}" -eq 0 ]; then
-      echo "[WARNING] Error while pushing changes, retrying in 10 seconds"
+  # Error after 5 attempts
+  local i=0
+  for i in {1..5}; do
+    status=0
+    "${git_command[@]}"  pull --rebase && "${git_command[@]}" push || status=$?
+    if [[ "${status}" != 0 ]]; then
+      echo "[WARNING] Error while pushing changes, retrying in 10 seconds" >&2
       sleep 10
     else
-      echo "Changes pushed"
+      echo "[INFO] Changes pushed"
       break
     fi
-    i=$((i + 1))
   done
-  set -eo pipefail # disallow error
-  if [ $i -gt 5 ]; then
+  [[ "${status}" == 0 ]] || {
     echo "[ERROR] Error while pushing changes, exiting..."
-    exit 1
-  fi
+    return "${status}"
+  } >&2
 }
 
 function update_value_override() {
-  local _envrionmment=$1
+  local _environment=$1
   local _region=$2
   local _application=$3
   local _override_path=$4
   local _default=$5
-  local _value_file=./${_envrionmment}/${_region}/${_application}.override.yaml
+  local _value_dir="./${_environment}/${_region}"
+  [[ -d "${_value_dir}" ]] || return 0
+  local _value_file="${_value_dir}/${_application}.override.yaml"
   yq ". *n load(\"${_default}\")" "${_override_path}"> "${_value_file}"
   echo "[INFO] File ${_value_file} updated"
   if [ ! "${debug}" = true ]; then
-    git add --all
-    git commit -am "${_application} ${_envrionmment} ${_region} update override"
+    "${git_command[@]}"  add --all
+    "${git_command[@]}"  commit -am "${_application} ${_environment} ${_region} update override"
   fi
 }
 
@@ -196,7 +196,7 @@ function update_value_deploy() {
   else
     yq e -i "${_key}=\"${_sha256}\"" "${_values_file}"
     echo "File ${_values_file} updated with ${_key} => ${_sha256}"
-    git commit -am "${_app_name} ${_env}.${_region}: update sha256 to ${_sha256}"
+    "${git_command[@]}" commit -am "${_app_name} ${_env}.${_region}: update sha256 to ${_sha256}"
   fi
 }
 
@@ -223,7 +223,7 @@ function update_value_sqitch() {
   else
     yq e -i "${_key}=\"${_sha256}\"" "${_values_file}"
     echo "File ${_values_file} updated with ${_key} => ${_sha256}"
-    git commit -am "${_app_name} ${_env}.${_region}: update sha256 to ${_sha256}"
+    "${git_command[@]}"  commit -am "${_app_name} ${_env}.${_region}: update sha256 to ${_sha256}"
   fi
 }
 
@@ -236,9 +236,7 @@ if [ "${debug}" = true ]; then
   set +x
 fi
 
-if [ -z "${REGIONS}"]; then
-  REGIONS="eu,ap"
-fi
+[[ ! -z "${REGIONS}" ]] || REGIONS="eu,ap"
 
 # change comma to white space
 regions=${REGIONS//,/$'\n'}
@@ -265,13 +263,27 @@ else
 fi
 
 # Use app_name variable if not empty, else set it with registry project part
-if [ -z "${APPNAME}" ]; then
-  APPNAME=$(echo "${REGISTRY}" | cut -d '/' -f2)
-fi
+[[ ! -z "${APPNAME}" ]] || APPNAME=$(echo "${REGISTRY}" | cut -d '/' -f2)
 
 #########################
 # Override file
 #########################
+
+# Combine override files
+[[ -z "${OVERRIDE_ADDITIONAL_PATHES}" ]] || {
+  echo "[INFO] Merging override files ${OVERRIDE_PATH} ${OVERRIDE_ADDITIONAL_PATHES}"
+  override_files=()
+  for override_file in $(tr ',' ' ' <<<"${OVERRIDE_ADDITIONAL_PATHES}"); do
+    override_files+=( "$(cd "${GITHUB_WORKSPACE}" && readlink -f "${override_file}")" )
+  done
+  override_temp="$(mktemp --suffix '.yaml')" &&
+  echo "[INFO] Merge ${OVERRIDE_PATH} ${override_files[@]} into ${override_temp}" &&
+  yq --prettyPrint eval-all '. as $item ireduce ({}; . * $item )' "${OVERRIDE_PATH}" "${override_files[@]}" > "${override_temp}" &&
+  OVERRIDE_PATH="${override_temp}" || {
+    echo '[ERROR] Unable to merge override files'
+    exit 1
+  } >&2
+}
 
 # Verify if override is needed
 if [ "${sqitch}" = "true" ]; then
@@ -287,7 +299,7 @@ if [ "${continue}" -eq 0 ]; then
   echo "[INFO] Nothing to change"
 else
   test_cue "${ENVIRONMENT}" "${OVERRIDE_PATH}"
-  test_chart "${ENVIRONMENT}" "${REGIONS}" "${APPNAME}" "${OVERRIDE_PATH}" "${KUBEVERSIONS}"
+  test_chart "${ENVIRONMENT}" "${REGIONS}" "${APPNAME}" "${OVERRIDE_PATH}"
 
   regions=${REGIONS//,/$'\n'}
   # For every defined regions, update values file with image sha
@@ -300,18 +312,18 @@ fi
 # Deploy file
 #########################
 
-set +e
 if [ "${sqitch}" = "true" ]; then
   # Get sqitch image digest from reference
   check_ecr_compute_sha "${sqitch_registry}" "${ref}"
 else
   # Get image digest from reference
-  check_ecr_compute_sha "${REGISTRY}" "${ref}"
+  [[ -z "${REGISTRY}" ]] || check_ecr_compute_sha "${REGISTRY}" "${ref}"
 fi
-set -e
 
 # For every defined regions, update values file with image sha
 for region in ${regions}; do
+  values_dir="${ENVIRONMENT}/${region}"
+  [[ -d "${values_dir}" ]] || continue
   echo "############################################"
   if [ "${sqitch}" = "true" ]; then
     echo "# UPDATE SQITCH ${region}, ${REGISTRY}"
@@ -319,7 +331,7 @@ for region in ${regions}; do
     echo "# UPDATE APP ${region}, ${REGISTRY}"
   fi
   echo "############################################"
-  values_file="${ENVIRONMENT}/${region}/${APPNAME}.yaml"
+  values_file="${values_dir}/${APPNAME}.yaml"
   echo "appname: ${APPNAME}"
   echo "registry: ${REGISTRY}"
   echo "registry-sqitch: ${REGISTRY}"
@@ -330,10 +342,10 @@ for region in ${regions}; do
   echo "sha computed: ${sha256}"
   echo "############################################"
   if [ ! "${debug}" = true ]; then
-    if [ ! -f "${values_file}" ]; then
+    [[ -f "${values_file}" ]] || {
       echo "[ERROR] File ${values_file} not found, exiting..."
       exit 1
-    fi
+    } >&2
     # Update value in yaml file
     echo "Updating the new version of ${APPNAME} in ${values_file} on ${ENVIRONMENT} ${region}"
     if [ "${sqitch}" = "true" ]; then
@@ -352,3 +364,11 @@ done
 if [ ! "${debug}" = true ]; then
   git_push
 fi
+
+[[ "${dry_run}" == 'false' ]] || {
+  for file in $(find "./${ENVIRONMENT}" -name "${APPNAME}*.yaml"); do
+    echo
+    echo "=============== ${file} ==============="
+    cat "${file}"
+  done
+}
