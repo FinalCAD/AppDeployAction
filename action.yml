@@ -28,7 +28,7 @@ inputs:
     default: 'master'
   registry:
     description: 'Registry name for app'
-    required: true
+    default: ''
   sqitch:
     description: 'Only trigger sqitch deploy'
     default: false
@@ -42,11 +42,14 @@ inputs:
     description: 'Tag to deploy'
     default: ''
   override-file:
-    description: 'File with path for override files configuration'
+    description: 'Path relative to project SCM root for override configuration file'
     default: '.finalcad/overrides.yaml'
-  kubernetes-version:
-    description: 'Kubernetes version to test against'
-    default: '1.28.0'
+  additional-override-files:
+    description: 'Comma-separated list of additional override files relative to current directory'
+    default: ''
+  dry-run:
+    description: "Don't modify any thing, just print generated files"
+    default: 'false'
 runs:
   using: 'composite'
   steps:
@@ -126,8 +129,9 @@ runs:
         REF: ${{ inputs.tag }}
         ACTOR_EMAIL: ${{ steps.actor.outputs.actor-email }}
         ACTOR_NAME: ${{ steps.actor.outputs.actor-name }}
-        OVERRIDE_PATH: ../app/${{ inputs.override-file }}
-        KUBEVERSIONS: ${{ inputs.kubernetes-version }}
+        OVERRIDE_PATH: ${{ github.workspace }}/app/${{ inputs.override-file }}
+        OVERRIDE_ADDITIONAL_PATHES: "${{ inputs.additional-override-files }}"
         DEFAULT_FILE: ${{ github.action_path }}/default.yaml
+        DRY_RUN: ${{ inputs.dry-run }}
       run: |
         bash ${GITHUB_ACTION_PATH}/update.sh

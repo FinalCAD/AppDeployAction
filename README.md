@@ -29,7 +29,10 @@ Github token to avoid limit rate when pulling package
 [**Required**] Github ssh key to pull & change eks-apps repository
 
 ### `override-file`
-Path for override file, Default: `.finalcad/overrides.yaml`
+Path for override file relative to project SCM root, Default: `.finalcad/overrides.yaml`
+
+### `additional-override-files`
+Comma-separated list of additional override files relative to current directory
 
 ### `kubernetes-version`
 List of kubernetes version to test tthe chart against, default: `1.27.0`
