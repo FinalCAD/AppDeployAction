@@ -31,14 +31,17 @@ function override_continue() {
     local _region_dir="./${_environment}/${r}"
     [[ -d "${_region_dir}" ]] || continue
     echo "[INFO] Check region : ${r}"
-    if [ -f "./${_environment}/${r}/${_application}.override.yaml" ]; then
-      echo "[INFO] Existing override file in eks-apps needs to be checked (./${_environment}/${r}/${_application}.override.yaml)"
+    local _override_file="./${_environment}/${r}/${_application}.override.yaml"
+    if [[ -f "${_override_file}" ]]; then
+      echo "[INFO] Existing override file in eks-apps needs to be checked (${_override_file})"
       if [ -f "${_override_path}" ]; then
-        echo "[INFO] Existing override file in apps repository needs to be checked (${_override_path})"
-        override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}")
-        diff <(yq -P 'sort_keys(..)' <(echo "${override_value}")) <(yq -P 'sort_keys(..)' "./${_environment}/${r}/${_application}.override.yaml") > /dev/null
-        exit_code="$?"
-        if [ ! "${exit_code}" -eq 0 ]; then
+        echo "[INFO] Existing override file in apps repository needs to be checked (${_override_path})" &&
+        override_value=$(yq ". *n load(\"${_default}\")" "${_override_path}") &&
+        true || {
+          echo '[ERROR] Unable to generate override values'
+          return 1
+        } >&2
+        if ! diff <(yq -P 'sort_keys(..)' <<<"${override_value}") <(yq -P 'sort_keys(..)' "${_override_file}") > /dev/null; then
           echo "[INFO] Drift detected"
           continue=1
         fi
@@ -115,20 +118,35 @@ function check_ecr_compute_sha() {
 
   local _repo_cmd=( aws ${aws_cli_options} --region "${aws_region}" ecr describe-repositories --repository-names "${_registry}" )
   echo "AWS cmd: ${_repo_cmd[@]}"
-  "${_repo_cmd[@]}" || status=$?
-  [[ "${status}" == 0 ]] || {
+  "${_repo_cmd[@]}" || {
+    local status=$?
     echo "[ERROR] Registry ${_registry} not found on ${aws_region}"
-    return "${status}"
+    return ${status}
+  } >&2
+
+  local _cmd=( aws ${aws_cli_options} --output json --region "${aws_region}" ecr describe-images --repository-name "${_registry}" )
+  echo "AWS cmd: ${_cmd[@]}"
+  local _describe_images=''
+  _describe_images="$("${_cmd[@]}")" || {
+    local status=$?
+    echo "[ERROR] Unable to list images from repository ${_registry} (${aws_region})"
+    return ${status}
   } >&2
 
   local _computed_sha256=''
-  local _cmd=( aws ${aws_cli_options} --output json --region "${aws_region}" ecr describe-images --repository-name "${_registry}" )
-  echo "AWS cmd: ${_cmd[@]}"
-  _computed_sha256="$("${_cmd[@]}" | jq -r --arg imageTagIndex "${_reference}" '.imageDetails[] | select(.imageTags | index($imageTagIndex)) | .imageDigest')" || status=$?
-  [[ "${status}" == 0 && ! -z "${_computed_sha256}" ]] || {
-    echo "[ERROR] Unable to find a image with reference \"${_reference}\", exiting..."
-    return 1
+  _computed_sha256="$(jq -r --arg imageTagIndex "${_reference}" '.imageDetails[] | select(.imageTags | index($imageTagIndex)) | .imageDigest' <<<"${_describe_images}")" || {
+    local status=$?
+    echo "[ERROR] Error while looking up \"${_reference}\", exiting..."
+    jq <<<"${_describe_images}" || true
+    return ${status}
   } >&2
+
+  [[ ! -z "${_computed_sha256}" ]] || {
+    local status=$?
+    echo "[ERROR] Unable to find a image with reference \"${_reference}\", exiting..."
+    jq <<<"${_describe_images}" || true
+    return 1
+  }
   sha256="${_computed_sha256}"
 }
 
