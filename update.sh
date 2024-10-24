@@ -195,10 +195,18 @@ function update_value_override() {
   [[ -d "${_value_dir}" ]] || return 0
   local _value_file="${_value_dir}/${_application}.override.yaml"
   yq ". *n load(\"${_default}\")" "${_override_path}"> "${_value_file}"
-  echo "[INFO] File ${_value_file} updated"
-  if [ ! "${debug}" = true ]; then
-    "${git_command[@]}"  add --all
-    "${git_command[@]}"  commit -am "${_application} ${_environment} ${_region} update override"
+  if [[ ! -z "$(git diff)" ]]; then
+    echo "[INFO] File ${_value_file} updated"
+    if [ ! "${debug}" = true ]; then
+      "${git_command[@]}"  add --all &&
+      "${git_command[@]}"  commit -am "${_application} ${_environment} ${_region} update override" || {
+        local rc=$?
+        echo "[ERROR] Unable to commit changes to '${_value_file}'"
+        return $rc
+      }
+    fi
+  else
+    echo "[INFO] File ${_value_file} unchanged"
   fi
 }
 
