@@ -148,6 +148,9 @@ function check_ecr_compute_sha() {
     return 1
   }
   sha256="${_computed_sha256}"
+  if [ "${debug}" = true ]; then
+    echo "[DEBUG] sha256: ${sha256}"
+  fi
 }
 
 function setup_git() {
@@ -341,7 +344,13 @@ fi
 # For every defined regions, update values file with image sha
 for region in ${regions}; do
   values_dir="${ENVIRONMENT}/${region}"
-  [[ -d "${values_dir}" ]] || continue
+  if [ "${debug}" = true ]; then
+    echo "[DEBUG] values_dir: ${values_dir}"
+  fi
+  [[ -d "${values_dir}" ]] || {
+    echo "[INFO] Ignore environment/region ${values_dir}"
+    continue
+  }
   echo "############################################"
   if [ "${sqitch}" = "true" ]; then
     echo "# UPDATE SQITCH ${region}, ${REGISTRY}"
