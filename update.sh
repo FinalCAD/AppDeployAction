@@ -194,8 +194,9 @@ function update_value_override() {
   local _value_dir="./${_environment}/${_region}"
   [[ -d "${_value_dir}" ]] || return 0
   local _value_file="${_value_dir}/${_application}.override.yaml"
+  echo "[INFO] Merge '${_default}' with '${_override_path}' into '${_value_file}'
   yq ". *n load(\"${_default}\")" "${_override_path}"> "${_value_file}"
-  if [[ ! -z "$(git diff)" ]]; then
+  if [[ ! -z "$(git status --short "${_value_file}")" ]]; then
     echo "[INFO] File ${_value_file} updated"
     if [ ! "${debug}" = true ]; then
       "${git_command[@]}"  add --all &&
