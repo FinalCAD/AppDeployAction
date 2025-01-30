@@ -3,11 +3,10 @@ description: 'Update charts for deploy'
 inputs:
   app-name:
     description: 'Application id'
-    required: false
     default: ''
   aws-role:
     description: 'Aws role to apply changes'
-    required: true
+    default: ''
   aws-region:
     description: 'Aws region'
     default: 'eu-central-1'
@@ -16,7 +15,7 @@ inputs:
     default: false
   github-ssh:
     description: 'Github ssh key to pull terragrunt from github api'
-    required: true
+    default: ''
   github-token:
     description: 'Github token to pull package to avoid limit rate'
     default: ''
@@ -34,7 +33,7 @@ inputs:
     default: false
   environment:
     description: 'Finalcad envrionment: production, staging, sandbox'
-    required: true
+    default: ''
   regions:
     description: 'Regions: eu, ap'
     default: 'eu,ap'
@@ -53,85 +52,8 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: actions/checkout@v3
-      with:
-        path: 'app'
-    - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
-      with:
-        aws-region: ${{ inputs.aws-region }}
-        role-to-assume: ${{ inputs.aws-role }}
-        role-session-name: OIDCSession
-    - name: Define eks-apps repository
-      id: repository
+    - name: Deprecated version of FinalCAD/AppDeployAction
       shell: bash
       run: |
-        set -e
-        if [ "${{ inputs.environment }}" == "sandbox" ]; then
-          echo "repository=FinalCAD/eks-apps-sandbox" >> $GITHUB_OUTPUT
-        else
-          echo "repository=FinalCAD/eks-apps" >> $GITHUB_OUTPUT
-        fi
-    - name: "Checkout ${{ steps.repository.outputs.repository }}"
-      uses: actions/checkout@v3
-      with:
-        ssh-key: ${{ inputs.github-ssh }}
-        repository: ${{ steps.repository.outputs.repository }}
-        ref: ${{ inputs.helm-ref }}
-        path: 'helm'
-    # Setup ssh key
-    - name: Add ssh key
-      shell: bash
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ inputs.github-ssh }}" > ~/.ssh/id_rsa
-        ssh-keyscan github.com >> ~/.ssh/known_hosts
-        chmod 600 ~/.ssh/id_rsa ~/.ssh/known_hosts
-        eval $(ssh-agent)
-        ssh-add ~/.ssh/id_rsa
-    # Setup go
-    - name: Setup go
-      uses: actions/setup-go@v4
-      with:
-        token: ${{ inputs.github-token }}
-        go-version: 1.18
-    # Setup helm
-    - uses: azure/setup-helm@v3
-      with:
-        token: ${{ inputs.github-token }}
-    # Setup kubeconform & yq
-    - name: Setup kubeconform & yq & cue
-      shell: bash
-      run: |
-        go install github.com/yannh/kubeconform/cmd/kubeconform@v0.6.1
-        go install cuelang.org/go/cmd/cue@v0.6.0
-        mkdir -p ${RUNNER_TEMP}/yq
-        wget -q https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -O "${RUNNER_TEMP}/yq/yq"
-        chmod +x "${RUNNER_TEMP}/yq/yq"
-        echo "${RUNNER_TEMP}/yq" >> $GITHUB_PATH
-    - name: Get username & email of actor
-      id: actor
-      shell: bash
-      run: |
-        echo "actor-email=$(git log -1 --pretty=format:'%ae')" >> $GITHUB_OUTPUT
-        echo "actor-name=$(git log -1 --pretty=format:'%an')" >> $GITHUB_OUTPUT
-    - name: Update deployment manifest
-      shell: bash
-      working-directory: ./helm
-      env:
-        REGIONS: ${{ inputs.regions }}
-        REGISTRY: ${{ inputs.registry }}
-        AWS_REGION: ${{ inputs.aws-region }}
-        ENVIRONMENT: ${{ inputs.environment }}
-        APPNAME: ${{ inputs.app-name }}
-        SQITCH: ${{ inputs.sqitch }}
-        DEBUG: ${{ inputs.debug }}
-        REF: ${{ inputs.tag }}
-        ACTOR_EMAIL: ${{ steps.actor.outputs.actor-email }}
-        ACTOR_NAME: ${{ steps.actor.outputs.actor-name }}
-        OVERRIDE_PATH: ${{ github.workspace }}/app/${{ inputs.override-file }}
-        OVERRIDE_ADDITIONAL_PATHES: "${{ inputs.additional-override-files }}"
-        DEFAULT_FILE: ${{ github.action_path }}/default.yaml
-        DRY_RUN: ${{ inputs.dry-run }}
-      run: |
-        bash ${GITHUB_ACTION_PATH}/update.sh
+        echo '::error title=Deprecated version of FinalCAD/AppDeployAction::This version of FinalCAD/AppDeployAction is deprecated use `v3` instead.'
+        exit 1
