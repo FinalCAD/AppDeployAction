@@ -161,7 +161,9 @@ function setup_git() {
     ACTOR_NAME="${GITHUB_ACTOR}"
   fi
 
+  echo "[INFO] Git config 'user.email' '${ACTOR_EMAIL}'"
   "${git_command[@]}" config --global user.email "${ACTOR_EMAIL}"
+  echo "[INFO] Git config 'user.name' '${ACTOR_NAME}'"
   "${git_command[@]}" config --global user.name "${ACTOR_NAME}"
 }
 
