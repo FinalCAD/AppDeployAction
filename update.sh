@@ -102,7 +102,6 @@ function create_file_deploy() {
 ---
 app:
   name: $_app_name
-  finalcadContext: finalcad-one
 EOF
   yq e -i ".image.repository=\"${_registry}\"" "${_values_file}" &&
   yq e -i "${_key}=\"sha256:init\"" "${_values_file}" &&
