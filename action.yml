@@ -53,11 +53,12 @@ inputs:
 runs:
   using: 'composite'
   steps:
-    - uses: actions/checkout@v3
+    - name: Checkout app repository
+      uses: actions/checkout@v7
       with:
         path: 'app'
     - name: Configure AWS credentials
-      uses: aws-actions/configure-aws-credentials@v1
+      uses: aws-actions/configure-aws-credentials@v6
       with:
         aws-region: ${{ inputs.aws-region }}
         role-to-assume: ${{ inputs.aws-role }}
@@ -73,13 +74,12 @@ runs:
           echo "repository=FinalCAD/eks-apps" >> $GITHUB_OUTPUT
         fi
     - name: "Checkout ${{ steps.repository.outputs.repository }}"
-      uses: actions/checkout@v3
+      uses: actions/checkout@v7
       with:
         ssh-key: ${{ inputs.github-ssh }}
         repository: ${{ steps.repository.outputs.repository }}
         ref: ${{ inputs.helm-ref }}
         path: 'helm'
-    # Setup ssh key
     - name: Add ssh key
       shell: bash
       run: |
@@ -89,17 +89,15 @@ runs:
         chmod 600 ~/.ssh/id_rsa ~/.ssh/known_hosts
         eval $(ssh-agent)
         ssh-add ~/.ssh/id_rsa
-    # Setup go
     - name: Setup go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v7
       with:
         token: ${{ inputs.github-token }}
         go-version: 1.18
-    # Setup helm
-    - uses: azure/setup-helm@v3
+    - name: Setup helm
+      uses: azure/setup-helm@v5
       with:
         token: ${{ inputs.github-token }}
-    # Setup kubeconform & yq
     - name: Setup kubeconform & yq & cue
       shell: bash
       run: |
