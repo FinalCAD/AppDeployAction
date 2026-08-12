@@ -13,25 +13,25 @@ inputs:
     default: 'eu-central-1'
   debug:
     description: 'Debug mode'
-    default: false
+    default: "false"
   github-ssh:
     description: 'Github ssh key to pull terragrunt from github api'
     required: true
   github-token:
     description: 'Github token to pull package to avoid limit rate'
     default: ''
-  helm-repo:
-    description: 'helm repository'
-    default: 'FinalCAD/eks-apps'
+  helm-git-url:
+    description: 'Git url to use for pulling repo ArgoCD'
+    default: 'git@gitlab.com:orisha-group/construction/advae/finalcad-one/infrastructure/eks-apps.git'
   helm-ref:
-    descrition: 'Ref to use for pulling helm repo'
+    description: 'Ref to use for pulling helm repo'
     default: 'master'
   registry:
     description: 'Registry name for app'
     default: ''
   sqitch:
     description: 'Only trigger sqitch deploy'
-    default: false
+    default: "false"
   environment:
     description: 'Finalcad envrionment: production, staging, sandbox'
     required: true
@@ -53,6 +53,18 @@ inputs:
 runs:
   using: 'composite'
   steps:
+    - name: Setup SSH agent
+      uses: webfactory/ssh-agent@v0.10.0
+      with:
+        ssh-private-key: ${{ inputs.github-ssh }}
+    - name: Setup SSH known hosts
+      shell: bash
+      run: |
+        echo '::group::Setup SSH known hosts'
+        [[ -d ~/.ssh ]] || mkdir -p ~/.ssh
+        ssh-keyscan github.com >> ~/.ssh/known_hosts
+        ssh-keyscan gitlab.com >> ~/.ssh/known_hosts
+        echo '::endgroup::'
     - name: Checkout app repository
       uses: actions/checkout@v7
       with:
@@ -63,32 +75,18 @@ runs:
         aws-region: ${{ inputs.aws-region }}
         role-to-assume: ${{ inputs.aws-role }}
         role-session-name: OIDCSession
-    - name: Define eks-apps repository
-      id: repository
+    - name: "Checkout ArgoCD repository"
       shell: bash
       run: |
-        set -e
-        if [ "${{ inputs.environment }}" == "sandbox" ]; then
-          echo "repository=FinalCAD/eks-apps-sandbox" >> $GITHUB_OUTPUT
-        else
-          echo "repository=FinalCAD/eks-apps" >> $GITHUB_OUTPUT
-        fi
-    - name: "Checkout ${{ steps.repository.outputs.repository }}"
-      uses: actions/checkout@v7
-      with:
-        ssh-key: ${{ inputs.github-ssh }}
-        repository: ${{ steps.repository.outputs.repository }}
-        ref: ${{ inputs.helm-ref }}
-        path: 'helm'
-    - name: Add ssh key
-      shell: bash
-      run: |
-        mkdir -p ~/.ssh
-        echo "${{ inputs.github-ssh }}" > ~/.ssh/id_rsa
-        ssh-keyscan github.com >> ~/.ssh/known_hosts
-        chmod 600 ~/.ssh/id_rsa ~/.ssh/known_hosts
-        eval $(ssh-agent)
-        ssh-add ~/.ssh/id_rsa
+        echo '::group::Checkout ArgoCD repository'
+        git clone \
+          --progress \
+          --branch '${{ inputs.helm-ref }}' \
+          --depth 1 \
+          --no-tags \
+          '${{ inputs.helm-git-url }}' \
+          'helm'
+        echo '::endgroup::'
     - name: Setup go
       uses: actions/setup-go@v7
       with:
@@ -133,3 +131,9 @@ runs:
         DRY_RUN: ${{ inputs.dry-run }}
       run: |
         bash ${GITHUB_ACTION_PATH}/update.sh
+    - name: Clear local repositories
+      shell: bash
+      run: |
+        echo '::group::Clear local repositories'
+        rm -rf './helm'
+        echo '::endgroup::'
