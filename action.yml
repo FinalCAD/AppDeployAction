@@ -25,7 +25,7 @@ inputs:
     default: 'git@gitlab.com:orisha-group/construction/advae/finalcad-one/infrastructure/eks-apps.git'
   helm-ref:
     description: 'Ref to use for pulling helm repo'
-    default: 'master'
+    default: ''
   registry:
     description: 'Registry name for app'
     default: ''
@@ -79,13 +79,17 @@ runs:
       shell: bash
       run: |
         echo '::group::Checkout ArgoCD repository'
-        git clone \
-          --progress \
-          --branch '${{ inputs.helm-ref }}' \
-          --depth 1 \
-          --no-tags \
-          '${{ inputs.helm-git-url }}' \
+        clone_args=(
+          --progress
+        )
+        [[ -z '${{ inputs.helm-ref }}' ]] || clone_args+=(--branch '${{ inputs.helm-ref }}')
+        clone_args+=(
+          --depth 1
+          --no-tags
+          '${{ inputs.helm-git-url }}'
           'helm'
+        )
+        git clone "${clone_args[@]}"
         echo '::endgroup::'
     - name: Setup go
       uses: actions/setup-go@v7
