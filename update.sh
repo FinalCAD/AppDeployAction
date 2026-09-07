@@ -76,7 +76,7 @@ function test_chart() {
   for _region in ${_regions//,/$'\n'}; do
     echo "[INFO] Kubeconform & helm for ${_region}"
 
-    ./bin/check_templates.sh \
+    ./bin/check-templates.sh \
       --environment "${_environment}" \
       --region "${_region}" \
       --application "${_application}" \
