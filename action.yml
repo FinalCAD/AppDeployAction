@@ -133,6 +133,7 @@ runs:
         OVERRIDE_ADDITIONAL_PATHES: "${{ inputs.additional-override-files }}"
         DEFAULT_FILE: ${{ github.action_path }}/default.yaml
         DRY_RUN: ${{ inputs.dry-run }}
+        DEFAULT_KUBEVERSION: "1.35.0"
       run: |
         bash ${GITHUB_ACTION_PATH}/update.sh
     - name: Clear local repositories
