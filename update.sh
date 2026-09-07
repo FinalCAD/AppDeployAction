@@ -76,11 +76,11 @@ function test_chart() {
   for _region in ${_regions//,/$'\n'}; do
     echo "[INFO] Kubeconform & helm for ${_region}"
 
-    ./scripts/check_templates.sh \
+    ./bin/check_templates.sh \
       --environment "${_environment}" \
       --region "${_region}" \
-      --file-name "${_application}.yaml" \
-      --override-file "${_override_path}" || {
+      --application "${_application}" \
+      --file "${_override_path}" || {
         echo "[ERROR] Check template has failed after override"
         exit 1
     }
